@@ -1,0 +1,50 @@
+### RAG API - Testes de endpoints
+### Base URL (ajuste se necessário)
+@baseUrl = http://localhost:8000
+
+### ============================================
+### Health Check
+### ============================================
+
+### Health check
+GET {{baseUrl}}/health
+
+### ============================================
+### Ingestão de Documentos
+### ============================================
+
+### Ingerir documento
+POST {{baseUrl}}/documents
+Content-Type: application/json
+
+{
+  "content": "A inteligência artificial é um campo da ciência da computação que busca criar sistemas capazes de realizar tarefas que normalmente requerem inteligência humana, como reconhecimento de voz, tomada de decisões e tradução entre idiomas."
+}
+
+### Ingerir documento vazio (deve retornar 400)
+POST {{baseUrl}}/documents
+Content-Type: application/json
+
+{
+  "content": ""
+}
+
+### ============================================
+### Consultas RAG
+### ============================================
+
+### Fazer pergunta
+POST {{baseUrl}}/ask
+Content-Type: application/json
+
+{
+  "question": "O que é inteligência artificial?"
+}
+
+### Pergunta vazia (deve retornar 400)
+POST {{baseUrl}}/ask
+Content-Type: application/json
+
+{
+  "question": ""
+}
