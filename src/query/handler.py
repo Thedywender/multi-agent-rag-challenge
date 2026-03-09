@@ -17,7 +17,10 @@ def handle_ask(question: str, k: int = 5) -> dict:
         Dict com answer e sources.
     """
     q_embedding = get_embeddings([question])[0]
-    results = chroma_query(q_embedding, k=k)
+
+    rh_results = chroma_query("rh", q_embedding, k=k)
+    tecnico_results = chroma_query("tecnico", q_embedding, k=k)
+    results = (rh_results + tecnico_results)[:k]
 
     if not results:
         return {
@@ -30,5 +33,7 @@ def handle_ask(question: str, k: int = 5) -> dict:
 
     return {
         "answer": answer,
-        "sources": [{"document": r["document"], "metadata": r["metadata"]} for r in results],
+        "sources": [
+            {"document": r["document"], "metadata": r["metadata"]} for r in results
+        ],
     }
