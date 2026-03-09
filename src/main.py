@@ -3,6 +3,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from typing import Literal
 
 from src.ingest.handler import handle_ingest
 from src.query.handler import handle_ask
@@ -18,6 +19,7 @@ class DocumentRequest(BaseModel):
     """Payload para POST /documents."""
 
     content: str = Field(..., description="Texto do documento")
+    domain: Literal["rh", "tecnico"] = Field(..., description="Dominio da coleção")
 
 
 class AskRequest(BaseModel):
@@ -40,9 +42,11 @@ def post_documents(request: DocumentRequest) -> dict:
     Recebe um documento, divide em chunks, gera embeddings e armazena no Chroma.
     """
     if not request.content or not request.content.strip():
-        raise HTTPException(status_code=400, detail="O campo 'content' não pode estar vazio")
+        raise HTTPException(
+            status_code=400, detail="O campo 'content' não pode estar vazio"
+        )
 
-    result = handle_ingest(request.content)
+    result = handle_ingest(request.content, request.domain)
     return result
 
 
@@ -52,7 +56,9 @@ def post_ask(request: AskRequest) -> dict:
     Responde à pergunta usando RAG: busca contexto no Chroma e gera resposta via LLM.
     """
     if not request.question or not request.question.strip():
-        raise HTTPException(status_code=400, detail="O campo 'question' não pode estar vazio")
+        raise HTTPException(
+            status_code=400, detail="O campo 'question' não pode estar vazio"
+        )
 
     result = handle_ask(request.question)
     return result

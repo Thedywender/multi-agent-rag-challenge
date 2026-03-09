@@ -18,8 +18,7 @@ def _get_provider() -> str:
     provider = (os.environ.get("LLM_PROVIDER") or "openai").lower()
     if provider not in ("openai", "bedrock"):
         raise ValueError(
-            "LLM_PROVIDER deve ser 'openai' ou 'bedrock'. "
-            f"Valor atual: {provider}"
+            "LLM_PROVIDER deve ser 'openai' ou 'bedrock'. " f"Valor atual: {provider}"
         )
     return provider
 
@@ -43,7 +42,7 @@ def _call_llm_openai(question: str, context: str) -> str:
         ],
     )
 
-    return response.choices[0].message.content or ""
+    return response.choices[0].message.content.strip() or ""
 
 
 def _call_llm_bedrock(question: str, context: str) -> str:
