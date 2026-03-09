@@ -7,7 +7,7 @@ from src.shared.chroma_client import chroma_add
 from src.shared.embeddings import get_embeddings
 
 
-def handle_ingest(content: str) -> dict:
+def handle_ingest(content: str, domain: str) -> dict:
     """
     Processa o documento: chunking, embeddings e armazenamento no Chroma.
 
@@ -19,10 +19,10 @@ def handle_ingest(content: str) -> dict:
     """
     chunks = chunk_text(content)
     if not chunks:
-        return {"doc_id": None, "chunks_count": 0}
+        return {"doc_id": None, "chunks_count": 0, "domain": domain}
 
     embeddings = get_embeddings(chunks)
     doc_id = str(uuid.uuid4())
     chroma_add(doc_id, chunks, embeddings)
 
-    return {"doc_id": doc_id, "chunks_count": len(chunks)}
+    return {"doc_id": doc_id, "chunks_count": len(chunks), "domain": domain}
