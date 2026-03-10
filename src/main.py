@@ -1,9 +1,10 @@
 """API FastAPI para RAG - ingestão e consulta."""
 
-from fastapi import FastAPI, HTTPException
+from typing import Any, Literal
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from typing import Literal
 
 from src.ingest.handler import handle_ingest
 from src.query.handler import handle_ask
@@ -28,16 +29,45 @@ class AskRequest(BaseModel):
     question: str = Field(..., description="Pergunta do usuário")
 
 
+class DocumentResponse(BaseModel):
+    """Resposta de POST /documents."""
+
+    doc_id: str | None
+    chunks_count: int
+    domain: Literal["rh", "tecnico"]
+
+
+class SourceItem(BaseModel):
+    """Fonte utilizada para responder uma pergunta."""
+
+    document: str
+    metadata: dict[str, Any]
+
+
+class AskResponse(BaseModel):
+    """Resposta de POST /ask."""
+
+    answer: str
+    sources: list[SourceItem]
+    routed_domain: Literal["rh", "tecnico", "geral"]
+
+
+class HealthResponse(BaseModel):
+    """Resposta de GET /health."""
+
+    status: str
+
+
 @app.exception_handler(ValueError)
-def value_error_handler(request, exc: ValueError):
+def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
     return JSONResponse(
         status_code=503,
         content={"detail": str(exc)},
     )
 
 
-@app.post("/documents")
-def post_documents(request: DocumentRequest) -> dict:
+@app.post("/documents", response_model=DocumentResponse)
+def post_documents(request: DocumentRequest) -> DocumentResponse:
     """
     Recebe um documento, divide em chunks, gera embeddings e armazena no Chroma.
     """
@@ -47,11 +77,11 @@ def post_documents(request: DocumentRequest) -> dict:
         )
 
     result = handle_ingest(request.content, request.domain)
-    return result
+    return DocumentResponse(**result)
 
 
-@app.post("/ask")
-def post_ask(request: AskRequest) -> dict:
+@app.post("/ask", response_model=AskResponse)
+def post_ask(request: AskRequest) -> AskResponse:
     """
     Responde à pergunta usando RAG: busca contexto no Chroma e gera resposta via LLM.
     """
@@ -61,10 +91,10 @@ def post_ask(request: AskRequest) -> dict:
         )
 
     result = handle_ask(request.question)
-    return result
+    return AskResponse(**result)
 
 
-@app.get("/health")
-def health() -> dict:
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
     """Health check."""
-    return {"status": "ok"}
+    return HealthResponse(status="ok")

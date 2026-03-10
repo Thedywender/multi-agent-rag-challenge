@@ -103,19 +103,19 @@ def route_question(question: str) -> Domain:
     rh_score = _keyword_score(text, RH_KEYWORDS)
     tech_score = _keyword_score(text, TECNICO_KEYWORDS)
 
-    # Caso fácil: um lado tem sinal e o outro não
+    # Se houver um lado com kw e o outro não
     if rh_score >= MIN_SCORE_TO_DECIDE and tech_score == 0:
         return "rh"
     if tech_score >= MIN_SCORE_TO_DECIDE and rh_score == 0:
         return "tecnico"
 
-    # Caso claro por margem
+    # Confirmando se não tem ambiguidade entre os dois
     if rh_score - tech_score >= MIN_MARGIN_TO_DECIDE:
         return "rh"
     if tech_score - rh_score >= MIN_MARGIN_TO_DECIDE:
         return "tecnico"
 
-    # Ambíguo/fraco: LLM
+    # Se ambiguo manda pro LLM
     try:
         return _llm_classify(question)
     except Exception:

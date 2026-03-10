@@ -30,7 +30,9 @@ def build_response(question: str, results: list[dict], routed_domain: str) -> di
     }
 
 
-def retrieve_embedding(question_embedding: str, domain: str, k: int) -> list[dict]:
+def retrieve_embedding(
+    question_embedding: list[float], domain: str, k: int
+) -> list[dict]:
     """
     Executa retrieval embedding em um domínio específico.
     """
