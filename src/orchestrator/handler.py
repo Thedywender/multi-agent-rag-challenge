@@ -90,7 +90,7 @@ def _llm_classify(question: str) -> Domain:
     # fallback tolerante
     if "tecnico" in label:
         return "tecnico"
-    if "rh" in label or "recursos humanos" in label:
+    if "rh" in label:
         return "rh"
     return "geral"
 
@@ -98,7 +98,7 @@ def _llm_classify(question: str) -> Domain:
 def route_question(question: str) -> Domain:
     text = _normalize(question)
     if not text:
-        return "geral"
+        return []
 
     rh_score = _keyword_score(text, RH_KEYWORDS)
     tech_score = _keyword_score(text, TECNICO_KEYWORDS)

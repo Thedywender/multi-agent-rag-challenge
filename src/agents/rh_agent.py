@@ -16,4 +16,4 @@ def answer(question: str, k: int = 5) -> dict:
     """
     domain = "rh"
     results = retrieve(question, domain, k)
-    return build_response(question, results, domain)
+    return build_response(question, results, routed_domain=domain)
