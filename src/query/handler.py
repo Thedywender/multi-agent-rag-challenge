@@ -1,37 +1,9 @@
 """Handler de consulta (RAG)."""
 
-from src.shared.chroma_client import chroma_query
+from src.agents.base import retrieve_embedding, build_response
 from src.shared.embeddings import get_embeddings
 from src.orchestrator.handler import route_question
-from src.shared.llm import call_llm
-
-
-def _build_response(question: str, results: list[dict], routed_domain: str) -> dict:
-    """
-    Monta resposta final, incluindo resposta da LLM e fontes.
-
-    Args:
-        question: Pergunta do usuário.
-        results: Lista de chunks recuperados do Chroma.
-        route_domain: Domínio para roteamento (rh, tecnico ou geral).
-    """
-
-    if not results:
-        return {
-            "answer": "Não encontrei documentos relevantes para essa pergunta.",
-            "sources": [],
-            "routed_domain": routed_domain,
-        }
-    context = "\n\n".join(r["document"] for r in results)
-    answer = call_llm(question, context)
-
-    return {
-        "answer": answer,
-        "sources": [
-            {"document": r["document"], "metadata": r["metadata"]} for r in results
-        ],
-        "routed_domain": routed_domain,
-    }
+from src.agents.registry import get_agent
 
 
 def handle_ask(question: str, k: int = 5) -> dict:
@@ -48,21 +20,13 @@ def handle_ask(question: str, k: int = 5) -> dict:
     q_embedding = get_embeddings([question])[0]
     domain = route_question(question)
 
-    if domain == "rh":
-        return _build_response(
-            question,
-            chroma_query("rh", q_embedding, k=k),
-            "rh",
-        )
+    agent = get_agent(domain)
+    if agent:
+        return agent(question, q_embedding, k=k)
 
-    if domain == "tecnico":
-        return _build_response(
-            question,
-            chroma_query("tecnico", q_embedding, k=k),
-            "tecnico",
-        )
-
-    # fallback geral consulta os dois dominios
-    rh_results = chroma_query("rh", q_embedding, k=k)
-    tecnico_results = chroma_query("tecnico", q_embedding, k=k)
-    return _build_response(question, rh_results + tecnico_results, "geral")
+    # fallback geral consulta os dois dominios e responde uma vez
+    rh_results = retrieve_embedding(q_embedding, "rh", k=k)
+    tecnico_results = retrieve_embedding(q_embedding, "tecnico", k=k)
+    return build_response(
+        question, (rh_results + tecnico_results)[:k], routed_domain="geral"
+    )
