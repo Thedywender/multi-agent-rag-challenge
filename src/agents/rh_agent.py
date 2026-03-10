@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from src.agents.base import build_response, retrieve
+from src.agents.base import build_response, retrieve_embedding
+
+DOMAIN = "rh"
 
 
-def answer(question: str, k: int = 5) -> dict:
+def answer(question: str, question_embedding: list[float], k: int = 5) -> dict:
     """
     Resposta com RAG: retrieval + LLM.
 
@@ -14,6 +16,6 @@ def answer(question: str, k: int = 5) -> dict:
     Returns:
         Dict com answer e sources.
     """
-    domain = "rh"
-    results = retrieve(question, domain, k)
-    return build_response(question, results, routed_domain=domain)
+
+    results = retrieve_embedding(question_embedding, domain=DOMAIN, k=k)
+    return build_response(question, results, routed_domain=DOMAIN)

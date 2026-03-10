@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from src.shared.chroma_client import chroma_query
-from src.shared.embeddings import get_embeddings
 from src.shared.llm import call_llm
 
 
@@ -31,9 +30,9 @@ def build_response(question: str, results: list[dict], routed_domain: str) -> di
     }
 
 
-def retrieve(question: str, domain: str, k: int) -> list[dict]:
+def retrieve_embedding(question_embedding: str, domain: str, k: int) -> list[dict]:
     """
-    Executa retrieval em um domínio específico.
+    Executa retrieval embedding em um domínio específico.
     """
-    q_embedding = get_embeddings([question])[0]
-    return chroma_query(domain, q_embedding, k=k)
+
+    return chroma_query(domain, question_embedding, k=k)
