@@ -13,7 +13,7 @@ def _get_client() -> chromadb.HttpClient:
 
 
 def chroma_add(
-    collection_name: str, chunks: list[str], embeddings: list[list[float]]
+    collection_name: str, doc_id: str, chunks: list[str], embeddings: list[list[float]]
 ) -> None:
     """
     Adiciona chunks e embeddings ao Chroma.

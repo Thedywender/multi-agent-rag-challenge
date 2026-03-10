@@ -23,6 +23,31 @@ def _get_provider() -> str:
     return provider
 
 
+def call_llm_context(prompt: str) -> str:
+    """
+    Chama o LLM para tarefas sem contexto RAG (ex.: classificação).
+    Não use isso para responder perguntas com fontes.
+    """
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key or api_key.startswith("sk-your-"):
+        raise ValueError("OPENAI_API_KEY não configurada.")
+
+    client = OpenAI(api_key=api_key)
+
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": "Você é um classificador. Responda apenas com a label solicitada.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0,  # classificação determinística
+    )
+    return resp.choices[0].message.content.strip() or ""
+
+
 def _call_llm_openai(question: str, context: str) -> str:
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key or api_key.startswith("sk-your-"):

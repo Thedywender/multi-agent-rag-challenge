@@ -23,6 +23,6 @@ def handle_ingest(content: str, domain: str) -> dict:
 
     embeddings = get_embeddings(chunks)
     doc_id = str(uuid.uuid4())
-    chroma_add(doc_id, chunks, embeddings)
+    chroma_add(domain, doc_id, chunks, embeddings)
 
     return {"doc_id": doc_id, "chunks_count": len(chunks), "domain": domain}

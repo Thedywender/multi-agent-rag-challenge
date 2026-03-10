@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from typing import Literal
 
-from src.shared.llm import _call_llm_openai
+from src.shared.llm import (
+    call_llm_contexto,
+)
 
 Domain = Literal["rh", "tecnico", "geral"]
 
@@ -51,24 +55,22 @@ TECNICO_KEYWORDS = {
     "infra",
 }
 
+MIN_SCORE_TO_DECIDE = 1
+MIN_MARGIN_TO_DECIDE = 2
+
+
+def _normalize(text: str) -> str:
+    text = (text or "").lower().strip()
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    return re.sub(r"\s+", " ", text)
+
 
 def _keyword_score(text: str, keywords: set[str]) -> int:
-    """
-    Score simples: soma 1 para cada keyword encontrada no texto.
-    Isso é melhor que boolean puro e reduz engessamento.
-    """
-    score = 0
-    for kw in keywords:
-        if kw in text:
-            score += 1
-    return score
+    return sum(1 for kw in keywords if kw in text)
 
 
 def _llm_classify(question: str) -> Domain:
-    """
-    Classificação flexível via LLM.
-    O LLM deve retornar SOMENTE: rh | tecnico | geral
-    """
     prompt = (
         "Classifique a pergunta em apenas uma categoria: rh, tecnico ou geral.\n"
         "Definições:\n"
@@ -79,43 +81,42 @@ def _llm_classify(question: str) -> Domain:
         f"Pergunta: {question}"
     )
 
-    # Se seu call_llm exige context, passe "" como contexto.
-    # (mantém compatibilidade com a função existente do projeto)
-    raw = _call_llm_openai(prompt, context="")  # ajuste se sua assinatura for diferente
+    raw = call_llm_contexto(prompt)
     label = (raw or "").strip().lower()
 
     if label in ("rh", "tecnico", "geral"):
         return label  # type: ignore[return-value]
+
+    # fallback tolerante
+    if "tecnico" in label:
+        return "tecnico"
+    if "rh" in label or "recursos humanos" in label:
+        return "rh"
     return "geral"
 
 
 def route_question(question: str) -> Domain:
-    """
-    Roteamento robusto:
-    1) tenta heurística por score
-    2) se ambíguo ou fraco, usa LLM para classificar
-    3) fallback seguro: geral
-    """
-    text = question.lower().strip()
+    text = _normalize(question)
+    if not text:
+        return "geral"
 
     rh_score = _keyword_score(text, RH_KEYWORDS)
     tech_score = _keyword_score(text, TECNICO_KEYWORDS)
 
-    # Casos fortes: diferença clara
-    if rh_score and not tech_score:
+    # Caso fácil: um lado tem sinal e o outro não
+    if rh_score >= MIN_SCORE_TO_DECIDE and tech_score == 0:
         return "rh"
-    if tech_score and not rh_score:
+    if tech_score >= MIN_SCORE_TO_DECIDE and rh_score == 0:
         return "tecnico"
 
-    # Se um ganhou com folga, roteia pelo vencedor
-    if rh_score - tech_score >= 2:
+    # Caso claro por margem
+    if rh_score - tech_score >= MIN_MARGIN_TO_DECIDE:
         return "rh"
-    if tech_score - rh_score >= 2:
+    if tech_score - rh_score >= MIN_MARGIN_TO_DECIDE:
         return "tecnico"
 
-    # Ambíguo ou fraco: pede ajuda ao LLM (mais flexível)
+    # Ambíguo/fraco: LLM
     try:
         return _llm_classify(question)
     except Exception:
-        # Nunca quebrar o /ask por falha do LLM do orquestrador
         return "geral"
