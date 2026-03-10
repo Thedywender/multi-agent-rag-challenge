@@ -12,7 +12,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda
 
 from src.shared.llm import (
-    call_llm_contexto_openai,
+    call_llm_context_openai,
 )
 
 Domain = Literal["rh", "tecnico", "geral"]
@@ -87,14 +87,19 @@ def _keyword_score(text: str, keywords: set[str]) -> int:
 
 @lru_cache(maxsize=1)
 def _classifier_chain():
-    return (
-        CLASSIFIER_PROMPT | RunnableLambda(call_llm_contexto_openai) | StrOutputParser()
-    )
+    def _invoke_classifier(prompt_value) -> str:
+        prompt_text = (
+            prompt_value.to_string()
+            if hasattr(prompt_value, "to_string")
+            else str(prompt_value)
+        )
+        return call_llm_context_openai(prompt_text)
+
+    return CLASSIFIER_PROMPT | RunnableLambda(_invoke_classifier) | StrOutputParser()
 
 
 def _llm_classify(question: str) -> Domain:
-
-    raw = _classifier_chain().invoke(question=question)
+    raw = _classifier_chain().invoke({"question": question})
     label = (raw or "").strip().lower()
 
     if label in ("rh", "tecnico", "geral"):
