@@ -5,11 +5,21 @@ from typing import Any
 
 import chromadb
 
+COLLECTION_MAP = {
+    "rh": "docs_rh",
+    "tecnico": "docs_tecnico",
+}
+
 
 def _get_client() -> chromadb.HttpClient:
     host = os.environ.get("CHROMA_HOST", "localhost")
     port = int(os.environ.get("CHROMA_PORT", "8000"))
     return chromadb.HttpClient(host=host, port=port)
+
+
+def _resolve_collection_name(domain: str) -> str:
+    normalized = (domain or "").strip().lower()
+    return COLLECTION_MAP.get(normalized, normalized)
 
 
 def chroma_add(
@@ -24,8 +34,9 @@ def chroma_add(
         chunks: Lista de textos dos chunks.
         embeddings: Lista de vetores de embedding.
     """
+    resolved_name = _resolve_collection_name(collection_name)
     client = _get_client()
-    collection = client.get_or_create_collection(name=collection_name)
+    collection = client.get_or_create_collection(name=resolved_name)
 
     ids = [f"{doc_id}_{i}" for i in range(len(chunks))]
     metadatas = [{"doc_id": doc_id, "domain": collection_name} for _ in chunks]
@@ -52,8 +63,9 @@ def chroma_query(
     Returns:
         Lista de dicts com 'document' e 'metadata'.
     """
+    resolved_name = _resolve_collection_name(collection_name)
     client = _get_client()
-    collection = client.get_or_create_collection(name=collection_name)
+    collection = client.get_or_create_collection(name=resolved_name)
 
     count = collection.count()
     if count == 0:
