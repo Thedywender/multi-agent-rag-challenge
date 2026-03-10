@@ -7,7 +7,7 @@ import unicodedata
 from typing import Literal
 
 from src.shared.llm import (
-    call_llm_contexto,
+    call_llm_context,
 )
 
 Domain = Literal["rh", "tecnico", "geral"]
@@ -81,7 +81,7 @@ def _llm_classify(question: str) -> Domain:
         f"Pergunta: {question}"
     )
 
-    raw = call_llm_contexto(prompt)
+    raw = call_llm_context(prompt)
     label = (raw or "").strip().lower()
 
     if label in ("rh", "tecnico", "geral"):
@@ -98,7 +98,7 @@ def _llm_classify(question: str) -> Domain:
 def route_question(question: str) -> Domain:
     text = _normalize(question)
     if not text:
-        return []
+        return "geral"
 
     rh_score = _keyword_score(text, RH_KEYWORDS)
     tech_score = _keyword_score(text, TECNICO_KEYWORDS)
