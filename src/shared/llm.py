@@ -23,7 +23,7 @@ def _get_provider() -> str:
     return provider
 
 
-def call_llm_context(prompt: str) -> str:
+def call_llm_contexto_openai(prompt: str) -> str:
     """
     Chama o LLM para tarefas sem contexto RAG (ex.: classificação).
     Não use isso para responder perguntas com fontes.

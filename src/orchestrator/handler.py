@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from functools import lru_cache
 from typing import Literal
 
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnableLambda
+
 from src.shared.llm import (
-    call_llm_context,
+    call_llm_contexto_openai,
 )
 
 Domain = Literal["rh", "tecnico", "geral"]
@@ -58,6 +63,16 @@ TECNICO_KEYWORDS = {
 MIN_SCORE_TO_DECIDE = 1
 MIN_MARGIN_TO_DECIDE = 2
 
+CLASSIFIER_PROMPT = PromptTemplate.from_template(
+    "Classifique a pergunta em apenas uma categoria: rh, tecnico ou geral.\n"
+    "Definições:\n"
+    "- rh: políticas internas, férias, benefícios, onboarding, home office, regras de RH.\n"
+    "- tecnico: APIs, arquitetura, autenticação, integrações, código, infra, endpoints.\n"
+    "- geral: não está claro ou mistura os dois.\n\n"
+    "Responda SOMENTE com uma dessas palavras: rh, tecnico ou geral.\n\n"
+    "Pergunta: {question}"
+)
+
 
 def _normalize(text: str) -> str:
     text = (text or "").lower().strip()
@@ -70,22 +85,20 @@ def _keyword_score(text: str, keywords: set[str]) -> int:
     return sum(1 for kw in keywords if kw in text)
 
 
-def _llm_classify(question: str) -> Domain:
-    prompt = (
-        "Classifique a pergunta em apenas uma categoria: rh, tecnico ou geral.\n"
-        "Definições:\n"
-        "- rh: políticas internas, férias, benefícios, onboarding, home office, regras de RH.\n"
-        "- tecnico: APIs, arquitetura, autenticação, integrações, código, infra, endpoints.\n"
-        "- geral: não está claro ou mistura os dois.\n\n"
-        "Responda SOMENTE com uma dessas palavras: rh, tecnico ou geral.\n\n"
-        f"Pergunta: {question}"
+@lru_cache(maxsize=1)
+def _classifier_chain():
+    return (
+        CLASSIFIER_PROMPT | RunnableLambda(call_llm_contexto_openai) | StrOutputParser()
     )
 
-    raw = call_llm_context(prompt)
+
+def _llm_classify(question: str) -> Domain:
+
+    raw = _classifier_chain().invoke(question=question)
     label = (raw or "").strip().lower()
 
     if label in ("rh", "tecnico", "geral"):
-        return label  # type: ignore[return-value]
+        return label
 
     # fallback tolerante
     if "tecnico" in label:
