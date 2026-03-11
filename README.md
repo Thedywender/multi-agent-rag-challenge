@@ -1,4 +1,4 @@
-# API RAG com Docker Compose
+# API RAG com Multi-Agentes/Docker Compose
 
 API para ingestão de documentos e consultas com RAG (Retrieval-Augmented Generation). Executa localmente via Docker Compose, com vector DB (Chroma) em container. Suporta **OpenAI** ou **AWS Bedrock** para embeddings e LLM.
 
@@ -9,11 +9,27 @@ Este repositório inclui um [desafio técnico](CHALLENGE.md) para evolução da 
 ## Arquitetura
 
 ```
-Cliente → API (FastAPI) → Chroma (vector DB) + OpenAI ou Bedrock (embeddings + LLM)
+Cliente → API (FastAPI) → Orquestrador → Agente RH | Agente Técnico
+                                ↓
+                        Chroma (docs_rh/docs_tecnico) + OpenAI ou Bedrock
 ```
 
 - **POST /documents**: Recebe documento e `domain` (`rh` ou `tecnico`), divide em chunks, gera embeddings e armazena no Chroma
 - **POST /ask**: Orquestra a pergunta (`rh`, `tecnico` ou `geral`), consulta as coleções corretas e gera resposta via LLM
+
+## Fluxo de roteamento
+
+1. A API recebe a pergunta em `POST /ask`.
+2. O orquestrador classifica em `rh`, `tecnico` ou `geral`.
+3. Para `rh` e `tecnico`, encaminha ao agente especialista do domínio.
+4. Para `geral`, aplica fallback e consulta as duas coleções (`docs_rh` e `docs_tecnico`), retornando as fontes combinadas.
+
+## Decisões de design
+
+- Coleções separadas no Chroma por domínio (`rh_docs` e `tecnico_docs`) com metadados `doc_id` e `domain`.
+- Orquestração com LangGraph (`embed -> route -> answer`) e registry de agentes especialistas.
+- Classificação híbrida: palavras-chave para casos diretos e fallback LLM em perguntas ambíguas.
+- Compatibilidade de provedor via `LLM_PROVIDER` para embeddings e geração (`openai` ou `bedrock`).
 
 ## Pré-requisitos
 
@@ -21,7 +37,7 @@ Cliente → API (FastAPI) → Chroma (vector DB) + OpenAI ou Bedrock (embeddings
 - **OpenAI**: Chave da API (`OPENAI_API_KEY`)
 - **Bedrock**: Credenciais AWS e acesso ao Bedrock na região configurada
 
-## Como executar
+## Como executar com Docker Compose
 
 1. Copie o arquivo de exemplo de variáveis de ambiente:
 
@@ -147,10 +163,10 @@ Isso prepara rapidamente o ambiente para testar o roteamento multi-agente sem in
 
 ```bash
 # URL padrão (http://localhost:8000)
-python scripts/migration.py
+python3 scripts/migration.py
 
 # URL customizada
-python scripts/migration.py --base-url http://localhost:8000
+python3 scripts/migration.py --base-url http://localhost:8000
 ```
 
 Saída esperada (resumo):
@@ -169,7 +185,7 @@ Se quiser repopular do zero:
 ```bash
 docker compose down -v
 docker compose up -d --build
-python scripts/migration.py
+python3 scripts/migration.py
 ```
 
 A massa de dados inclui temas de RH (férias, benefícios, onboarding, regulamento interno, home office) e temas técnicos (API de pagamentos, integração, arquitetura, endpoints e autenticação).
@@ -220,38 +236,35 @@ Esperado: `routed_domain = "geral"` com fontes combinadas dos dois domínios qua
 | CHROMA_HOST           | Host do Chroma (Docker)    | - (padrão: chroma)      |
 | CHROMA_PORT           | Porta do Chroma            | - (padrão: 8000)        |
 
-## Como parar
-
-```bash
-docker compose down
-```
-
-Para remover também os dados do Chroma:
-
-```bash
-docker compose down -v
 ```
 
 ## Estrutura do projeto
 
 ```
-rag/
-├── CHALLENGE.md          # Desafio técnico (multi-agentes, múltiplas coleções)
-├── docker-compose.yml    # api + chroma
+
+multi-agent-rag-challenge/
+├── CHALLENGE.md # Desafio técnico (multi-agentes, múltiplas coleções)
+├── docker-compose.yml # api + chroma
 ├── Dockerfile
 ├── requirements.txt
 ├── .env.example
-├── api.http              # Exemplos de requisições (REST Client)
+├── api.http # Exemplos de requisições (REST Client)
 ├── src/
-│   ├── main.py           # FastAPI app
-│   ├── ingest/handler.py # Lógica de ingestão
-│   ├── query/handler.py  # Lógica de consulta (RAG)
-│   └── shared/
-│       ├── chunking.py   # Divisão em chunks
-│       ├── embeddings.py # Embeddings (OpenAI ou Bedrock)
-│       ├── chroma_client.py # Cliente Chroma
-│       └── llm.py        # LLM (OpenAI ou Bedrock)
+│ ├── main.py # FastAPI app
+│ ├── ingest/handler.py # Lógica de ingestão
+│ ├── query/handler.py # Lógica de consulta (RAG)
+│ ├── orchestrator/ # Classificação e roteamento
+│ ├── agents/ # Agentes especialistas RH e técnico
+│ └── shared/
+│ ├── chunking.py # Divisão em chunks
+│ ├── embeddings.py # Embeddings (OpenAI ou Bedrock)
+│ ├── chroma_client.py # Cliente Chroma
+│ └── llm.py # LLM (OpenAI ou Bedrock)
 ├── scripts/
-│   └── migration.py      # Insere documentos de exemplo (5 RH + 5 técnico)
+│ └── migration.py # Insere documentos de exemplo (5 RH + 5 técnico)
+├── tests/ # Testes unitários (roteamento, agentes, contrato)
 └── README.md
+
+```
+
 ```

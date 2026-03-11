@@ -6,8 +6,8 @@ from typing import Any
 import chromadb
 
 COLLECTION_MAP = {
-    "rh": "docs_rh",
-    "tecnico": "docs_tecnico",
+    "rh": "rh_docs",  # Chroma impõe regra de nome de (coleção >= 3) chars
+    "tecnico": "tecnico_docs",  # Para padronizar os nomes
 }
 
 
