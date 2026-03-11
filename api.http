@@ -13,12 +13,22 @@ GET {{baseUrl}}/health
 ### Ingestão de Documentos
 ### ============================================
 
-### Ingerir documento
+### Ingerir documento RH
 POST {{baseUrl}}/documents
 Content-Type: application/json
 
 {
-  "content": "A inteligência artificial é um campo da ciência da computação que busca criar sistemas capazes de realizar tarefas que normalmente requerem inteligência humana, como reconhecimento de voz, tomada de decisões e tradução entre idiomas."
+  "content": "Política de férias: colaborador pode dividir férias em até 3 períodos com aprovação do RH.",
+  "domain": "rh"
+}
+
+### Ingerir documento técnico
+POST {{baseUrl}}/documents
+Content-Type: application/json
+
+{
+  "content": "A API de pagamentos aceita POST em /v1/payments com autenticação Bearer token.",
+  "domain": "tecnico"
 }
 
 ### Ingerir documento vazio (deve retornar 400)
@@ -26,7 +36,17 @@ POST {{baseUrl}}/documents
 Content-Type: application/json
 
 {
-  "content": ""
+  "content": "",
+  "domain": "rh"
+}
+
+### Ingerir documento com domínio inválido (deve retornar 422)
+POST {{baseUrl}}/documents
+Content-Type: application/json
+
+{
+  "content": "Documento inválido",
+  "domain": "inválid"
 }
 
 ### ============================================
@@ -38,7 +58,15 @@ POST {{baseUrl}}/ask
 Content-Type: application/json
 
 {
-  "question": "O que é inteligência artificial?"
+  "question": "Qual a política de férias?"
+}
+
+### Fazer pergunta técnica
+POST {{baseUrl}}/ask
+Content-Type: application/json
+
+{
+  "question": "Como autenticar na API de pagamentos?"
 }
 
 ### Pergunta vazia (deve retornar 400)

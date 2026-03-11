@@ -12,8 +12,8 @@ Este repositório inclui um [desafio técnico](CHALLENGE.md) para evolução da 
 Cliente → API (FastAPI) → Chroma (vector DB) + OpenAI ou Bedrock (embeddings + LLM)
 ```
 
-- **POST /documents**: Recebe documento, divide em chunks, gera embeddings e armazena no Chroma
-- **POST /ask**: Busca contexto no Chroma, monta prompt e gera resposta via LLM
+- **POST /documents**: Recebe documento e `domain` (`rh` ou `tecnico`), divide em chunks, gera embeddings e armazena no Chroma
+- **POST /ask**: Orquestra a pergunta (`rh`, `tecnico` ou `geral`), consulta as coleções corretas e gera resposta via LLM
 
 ## Pré-requisitos
 
@@ -32,12 +32,14 @@ cp .env.example .env
 2. Edite o `.env` e configure o provedor escolhido:
 
 **Opção A - OpenAI (padrão):**
+
 ```
 LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-proj-sua-chave-aqui
 ```
 
 **Opção B - AWS Bedrock:**
+
 ```
 LLM_PROVIDER=bedrock
 AWS_REGION=us-east-1
@@ -50,21 +52,38 @@ AWS_SECRET_ACCESS_KEY=sua-secret-key
 3. Suba os serviços:
 
 ```bash
+# Primeiro start (ou após mudança de dependências)
+docker compose up -d --build
+
+# Starts seguintes (sem rebuild)
 docker compose up -d
 ```
 
 4. Aguarde alguns segundos para o Chroma inicializar. A API estará disponível em `http://localhost:8000`.
 
+5. (Opcional) Comandos úteis no dia a dia:
+
+```bash
+# Pausar containers sem remover
+docker compose stop
+
+# Retomar containers parados
+docker compose start
+
+# Derrubar e remover volumes (zera dados do Chroma)
+docker compose down -v
+```
+
 ## Endpoints
 
 ### POST /documents
 
-Envia um documento para indexação.
+Envia um documento para indexação na coleção do domínio informado.
 
 ```bash
 curl -X POST http://localhost:8000/documents \
   -H "Content-Type: application/json" \
-  -d '{"content": "O prazo de pagamento é de 30 dias. O cliente deve efetuar o pagamento até a data do vencimento."}'
+  -d '{"content": "A política de férias permite divisão em até 3 períodos, com aprovação do RH.", "domain": "rh"}'
 ```
 
 Resposta:
@@ -72,31 +91,33 @@ Resposta:
 ```json
 {
   "doc_id": "uuid-do-documento",
-  "chunks_count": 1
+  "chunks_count": 1,
+  "domain": "rh"
 }
 ```
 
 ### POST /ask
 
-Faz uma pergunta com base nos documentos indexados.
+Faz uma pergunta; o orquestrador classifica e rota para o agente especialista.
 
 ```bash
 curl -X POST http://localhost:8000/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "Qual é o prazo de pagamento?"}'
+  -d '{"question": "Qual é a política de férias?"}'
 ```
 
 Resposta:
 
 ```json
 {
-  "answer": "O prazo de pagamento é de 30 dias.",
+  "answer": "A política de férias permite divisão em até 3 períodos com aprovação do RH.",
   "sources": [
     {
-      "document": "O prazo de pagamento é de 30 dias...",
-      "metadata": {"doc_id": "..."}
+      "document": "A política de férias permite divisão em até 3 períodos...",
+      "metadata": { "doc_id": "...", "domain": "rh" }
     }
-  ]
+  ],
+  "routed_domain": "rh"
 }
 ```
 
@@ -108,33 +129,96 @@ Health check da API.
 curl http://localhost:8000/health
 ```
 
-## Script de migração
+## Popular o Chroma com `scripts/migration.py`
 
-O script `scripts/migration.py` insere 5 documentos de exemplo em cada domínio (RH e técnico) via `POST /documents`. Útil para popular o banco após implementar as múltiplas coleções descritas no [CHALLENGE.md](CHALLENGE.md).
+O script `scripts/migration.py` popula as coleções com dados de exemplo via `POST /documents`:
 
-**Pré-requisito:** API rodando e endpoint `/documents` aceitando o campo `domain` (formato do desafio).
+- 5 documentos no domínio `rh`
+- 5 documentos no domínio `tecnico`
+
+Isso prepara rapidamente o ambiente para testar o roteamento multi-agente sem inserir documentos manualmente.
+
+### Pré-requisitos
+
+- API em execução (`docker compose up -d`)
+- Endpoint `/documents` aceitando o campo `domain` (já implementado neste projeto)
+
+### Executar migração
 
 ```bash
-# Com a API em localhost:8000
+# URL padrão (http://localhost:8000)
 python scripts/migration.py
 
-# Com URL customizada
+# URL customizada
 python scripts/migration.py --base-url http://localhost:8000
 ```
 
-A massa de dados inclui documentos sobre: política de férias, benefícios, onboarding, regulamento interno, home office (RH); API de pagamentos, guia de integração, arquitetura, endpoints, autenticação (técnico).
+Saída esperada (resumo):
+
+```text
+Conectando em http://localhost:8000
+Inserindo 10 documentos (5 RH + 5 técnico)...
+...
+--- Resumo ---
+Sucesso: 10/10
+Migração concluída com sucesso.
+```
+
+Se quiser repopular do zero:
+
+```bash
+docker compose down -v
+docker compose up -d --build
+python scripts/migration.py
+```
+
+A massa de dados inclui temas de RH (férias, benefícios, onboarding, regulamento interno, home office) e temas técnicos (API de pagamentos, integração, arquitetura, endpoints e autenticação).
+
+## Como fazer queries após popular o Chroma
+
+Depois da migração, use `POST /ask` normalmente. O orquestrador classifica a pergunta e retorna o domínio roteado em `routed_domain`.
+
+### Query de RH
+
+```bash
+curl -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Qual é a política de férias?"}'
+```
+
+Esperado: `routed_domain = "rh"`.
+
+### Query técnica
+
+```bash
+curl -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Como autenticar na API de pagamentos?"}'
+```
+
+Esperado: `routed_domain = "tecnico"`.
+
+### Query ambígua (fallback geral)
+
+```bash
+curl -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Quais regras de benefícios e endpoint de pagamentos?"}'
+```
+
+Esperado: `routed_domain = "geral"` com fontes combinadas dos dois domínios quando aplicável.
 
 ## Variáveis de ambiente
 
-| Variável       | Descrição                    | Obrigatório quando |
-| -------------- | ---------------------------- | ------------------ |
-| LLM_PROVIDER   | `openai` ou `bedrock`        | sempre (padrão: openai) |
-| OPENAI_API_KEY | Chave da API OpenAI          | LLM_PROVIDER=openai |
-| AWS_REGION     | Região AWS (ex: us-east-1)   | LLM_PROVIDER=bedrock |
-| AWS_ACCESS_KEY_ID | Credencial AWS             | LLM_PROVIDER=bedrock |
-| AWS_SECRET_ACCESS_KEY | Credencial AWS          | LLM_PROVIDER=bedrock |
-| CHROMA_HOST   | Host do Chroma (Docker)      | - (padrão: chroma) |
-| CHROMA_PORT   | Porta do Chroma              | - (padrão: 8000)   |
+| Variável              | Descrição                  | Obrigatório quando      |
+| --------------------- | -------------------------- | ----------------------- |
+| LLM_PROVIDER          | `openai` ou `bedrock`      | sempre (padrão: openai) |
+| OPENAI_API_KEY        | Chave da API OpenAI        | LLM_PROVIDER=openai     |
+| AWS_REGION            | Região AWS (ex: us-east-1) | LLM_PROVIDER=bedrock    |
+| AWS_ACCESS_KEY_ID     | Credencial AWS             | LLM_PROVIDER=bedrock    |
+| AWS_SECRET_ACCESS_KEY | Credencial AWS             | LLM_PROVIDER=bedrock    |
+| CHROMA_HOST           | Host do Chroma (Docker)    | - (padrão: chroma)      |
+| CHROMA_PORT           | Porta do Chroma            | - (padrão: 8000)        |
 
 ## Como parar
 
