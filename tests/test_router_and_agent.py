@@ -1,4 +1,4 @@
-from unittest import patch
+from unittest.mock import patch
 
 from src.agents.rh_agent import answer as rh_answer
 from src.agents.tecnico_agent import answer as tecnico_answer
@@ -14,7 +14,7 @@ def test_route_tecnico_by_kword():
 
 
 def test_route_geral_ambiguous():
-    with patch("src.orchestrator.handler._llm_classefy", return_value="geral"):
+    with patch("src.orchestrator.handler._llm_classify", return_value="geral"):
         assert route_question("beneficios e endpoint na mesma dúvida") == "geral"
 
 

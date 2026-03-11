@@ -16,4 +16,4 @@ def test_invalid_provider(monkeypatch):
     with pytest.raises(ValueError):
         emb_provider()
     with pytest.raises(ValueError):
-        llm_provider
+        llm_provider()
