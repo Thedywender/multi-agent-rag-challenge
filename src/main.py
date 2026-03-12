@@ -62,23 +62,14 @@ class HealthResponse(BaseModel):
     status: str
 
 
-def _error_response(
-    *,
-    status_code: int,
-    code: str,
-    message: str,
-    field: str | None = None,
-) -> JSONResponse:
-    return JSONResponse(
-        status_code=status_code,
-        content={
-            "error": {
-                "code": code,
-                "message": message,
-                "field": field,
-            }
-        },
-    )
+class ErrorDetail(BaseModel):
+    code: str
+    message: str
+    field: str | None = None
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorDetail
 
 
 @app.exception_handler(ValueError)
@@ -94,31 +85,35 @@ def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
             error_code,
             error_field,
         )
-        return _error_response(
-            status_code=400,
-            code=str(error_code),
-            message=str(exc),
-            field=error_field,
+        payload = ErrorResponse(
+            error=ErrorDetail(
+                code=(error_code),
+                message=str(exc),
+                field=error_field,
+            )
         )
+        return JSONResponse(status_code=400, content=payload.model_dump())
 
     logger.exception("processing_error path=%s", request.url.path)
-    return _error_response(
-        status_code=503,
-        code="service_unavailable",
-        message=str(exc),
-        field=None,
+    payload = ErrorResponse(
+        error=ErrorDetail(
+            code="service_unavailable",
+            message=str(exc),
+        )
     )
+    return JSONResponse(status_code=503, content=payload.model_dump())
 
 
 @app.exception_handler(Exception)
 def unexpected_error_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.exception("unexpected_error path=%s", request.url.path)
-    return _error_response(
-        status_code=500,
-        code="internal_error",
-        message="Erro interno inesperado.",
-        field=None,
+    payload = ErrorResponse(
+        error=ErrorDetail(
+            code="internal_error",
+            message="Erro interno inesperado.",
+        )
     )
+    return JSONResponse(status_code=500, content=payload.model_dump())
 
 
 @app.post("/documents", response_model=DocumentResponse)
