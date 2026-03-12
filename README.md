@@ -2,27 +2,17 @@
 
 API para ingestão de documentos e consultas com RAG (Retrieval-Augmented Generation). Executa localmente via Docker Compose, com vector DB (Chroma) em container. Suporta **OpenAI** ou **AWS Bedrock** para embeddings e LLM.
 
-## Desafio técnico
-
-Este repositório inclui um [desafio técnico](CHALLENGE.md) para evolução da aplicação: múltiplas coleções (RH e técnico), arquitetura multi-agente com orquestrador e agentes especialistas. Consulte o `CHALLENGE.md` para os requisitos e exemplos de requisições.
-
 ## Arquitetura
 
 ```
 Cliente → API (FastAPI) → Orquestrador → Agente RH | Agente Técnico
                                 ↓
-                        Chroma (docs_rh/docs_tecnico) + OpenAI ou Bedrock
+                        Chroma (rh_docs/tecnico_docs) + OpenAI ou Bedrock
 ```
 
-- **POST /documents**: Recebe documento e `domain` (`rh` ou `tecnico`), divide em chunks, gera embeddings e armazena no Chroma
+- **POST /documents**: Recebe documento e `domain` (`rh` ou `tecnico`), divide em chunks, gera embeddings e armazena no Chroma, armazena cada `domain` separado, para busca ser idempendente.
+
 - **POST /ask**: Orquestra a pergunta (`rh`, `tecnico` ou `geral`), consulta as coleções corretas e gera resposta via LLM
-
-## Fluxo de roteamento
-
-1. A API recebe a pergunta em `POST /ask`.
-2. O orquestrador classifica em `rh`, `tecnico` ou `geral`.
-3. Para `rh` e `tecnico`, encaminha ao agente especialista do domínio.
-4. Para `geral`, aplica fallback e consulta as duas coleções (`docs_rh` e `docs_tecnico`), retornando as fontes combinadas.
 
 ## Decisões de design
 
@@ -30,6 +20,18 @@ Cliente → API (FastAPI) → Orquestrador → Agente RH | Agente Técnico
 - Orquestração com LangGraph (`embed -> route -> answer`) e registry de agentes especialistas.
 - Classificação híbrida: palavras-chave para casos diretos e fallback LLM em perguntas ambíguas.
 - Compatibilidade de provedor via `LLM_PROVIDER` para embeddings e geração (`openai` ou `bedrock`).
+
+## Fluxo de roteamento
+
+1. A API recebe a pergunta em `POST /ask`.
+2. O orquestrador classifica em `rh`, `tecnico` ou `geral`.
+3. Para `rh` e `tecnico`, encaminha ao agente especialista do domínio.
+4. Para `geral`, aplica fallback e consulta as duas coleções (`rh_docs` e `tecnico_docs`), retornando as fontes combinadas.
+
+## Documentação técnica detalhada
+
+- [Arquitetura detalhada](docs/ARCHITECTURE.md)
+- [Decisões técnicas e fluxo de roteamento](docs/TECHNICAL_DESIGN.md)
 
 ## Pré-requisitos
 
@@ -108,7 +110,8 @@ Resposta:
 {
   "doc_id": "uuid-do-documento",
   "chunks_count": 1,
-  "domain": "rh"
+  "domain": "rh",
+  "already_exists": false
 }
 ```
 
@@ -224,6 +227,22 @@ curl -X POST http://localhost:8000/ask \
 
 Esperado: `routed_domain = "geral"` com fontes combinadas dos dois domínios quando aplicável.
 
+## Testes
+
+Cobertura de fluxos críticos:
+
+- Ingestão com deduplicação e controle de corrida
+- Orquestração e roteamento (`rh`, `tecnico`, `geral`)
+- Agentes especialistas por domínio
+- Contratos de request/response e handlers de erro
+- Compatibilidade de provider (`openai`/`bedrock`)
+
+Execute:
+
+```bash
+pytest -q
+```
+
 ## Variáveis de ambiente
 
 | Variável              | Descrição                  | Obrigatório quando      |
@@ -236,8 +255,6 @@ Esperado: `routed_domain = "geral"` com fontes combinadas dos dois domínios qua
 | CHROMA_HOST           | Host do Chroma (Docker)    | - (padrão: chroma)      |
 | CHROMA_PORT           | Porta do Chroma            | - (padrão: 8000)        |
 
-```
-
 ## Estrutura do projeto
 
 ```
@@ -249,6 +266,10 @@ multi-agent-rag-challenge/
 ├── requirements.txt
 ├── .env.example
 ├── api.http # Exemplos de requisições (REST Client)
+├── docs/
+│ ├── architecture.drawio # Diagrama editável da arquitetura
+│ ├── ARCHITECTURE.md # Fluxos e componentes da solução
+│ └── TECHNICAL_DESIGN.md # Decisões de design e roteamento
 ├── src/
 │ ├── main.py # FastAPI app
 │ ├── ingest/handler.py # Lógica de ingestão
@@ -262,9 +283,7 @@ multi-agent-rag-challenge/
 │ └── llm.py # LLM (OpenAI ou Bedrock)
 ├── scripts/
 │ └── migration.py # Insere documentos de exemplo (5 RH + 5 técnico)
-├── tests/ # Testes unitários (roteamento, agentes, contrato)
+├── tests/ # Testes unitários (ingestão, roteamento, agentes e contrato)
 └── README.md
-
-```
 
 ```
