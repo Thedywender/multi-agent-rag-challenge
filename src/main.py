@@ -1,13 +1,16 @@
 """API FastAPI para RAG - ingestão e consulta."""
 
+import logging
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from src.ingest.handler import handle_ingest
 from src.query.handler import handle_ask
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="RAG API",
@@ -35,6 +38,7 @@ class DocumentResponse(BaseModel):
     doc_id: str | None
     chunks_count: int
     domain: Literal["rh", "tecnico"]
+    already_exists: bool
 
 
 class SourceItem(BaseModel):
@@ -58,11 +62,62 @@ class HealthResponse(BaseModel):
     status: str
 
 
+def _error_response(
+    *,
+    status_code: int,
+    code: str,
+    message: str,
+    field: str | None = None,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "error": {
+                "code": code,
+                "message": message,
+                "field": field,
+            }
+        },
+    )
+
+
 @app.exception_handler(ValueError)
 def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
-    return JSONResponse(
+    # ValidationInputError herda de ValueError; detectamos por atributos.
+    error_code = getattr(exc, "code", None)
+    error_field = getattr(exc, "field", None)
+
+    if error_code is not None:
+        logger.warning(
+            "validation_error path=%s code=%s field=%s",
+            request.url.path,
+            error_code,
+            error_field,
+        )
+        return _error_response(
+            status_code=400,
+            code=str(error_code),
+            message=str(exc),
+            field=error_field,
+        )
+
+    logger.exception("processing_error path=%s", request.url.path)
+    return _error_response(
         status_code=503,
-        content={"detail": str(exc)},
+        code="service_unavailable",
+        message=str(exc),
+        field=None,
+    )
+
+
+@app.exception_handler(Exception)
+def unexpected_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("unexpected_error path=%s", request.url.path)
+    return _error_response(
+        status_code=500,
+        code="internal_error",
+        message="Erro interno inesperado.",
+        field=None,
     )
 
 
@@ -71,11 +126,6 @@ def post_documents(request: DocumentRequest) -> DocumentResponse:
     """
     Recebe um documento, divide em chunks, gera embeddings e armazena no Chroma.
     """
-    if not request.content or not request.content.strip():
-        raise HTTPException(
-            status_code=400, detail="O campo 'content' não pode estar vazio"
-        )
-
     result = handle_ingest(request.content, request.domain)
     return DocumentResponse(**result)
 
@@ -85,11 +135,6 @@ def post_ask(request: AskRequest) -> AskResponse:
     """
     Responde à pergunta usando RAG: busca contexto no Chroma e gera resposta via LLM.
     """
-    if not request.question or not request.question.strip():
-        raise HTTPException(
-            status_code=400, detail="O campo 'question' não pode estar vazio"
-        )
-
     result = handle_ask(request.question)
     return AskResponse(**result)
 

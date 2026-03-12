@@ -38,3 +38,11 @@ def test_ask_success_contract():
 
     assert resp.status_code == 200
     assert resp.json() == fake
+
+
+def test_ask_empty_question():
+    resp = client.post("/ask", json={"question": "   "})
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["error"]["field"] == "question"
+    assert body["error"]["code"] == "empty_field"
